@@ -13,6 +13,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { SAMPLE_UPLOAD_IMAGES, getNaverMapSearchUrl } from '../data/spaces';
+import { buildFallbackDiagnosis } from '../lib/aiFallback';
 import { geocodeGangwonAddress } from '../lib/geocode';
 import { registerSpaceInDb, saveDiagnosisInDb } from '../lib/firebase';
 import { DiagnosisReport, SpaceImageKey, VacantSpace } from '../types/space';
@@ -110,19 +111,33 @@ export function LandlordDiagnoseTab({
       reportAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 80);
 
+    const payload = {
+      location,
+      floor,
+      pyeong: Number(pyeong) || 25,
+      features,
+      hasPhoto: Boolean(previewPhoto),
+    };
+
     try {
-      const response = await fetch('/api/diagnose', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location,
-          floor,
-          pyeong: Number(pyeong) || 25,
-          features,
-          hasPhoto: Boolean(previewPhoto),
-        }),
-      });
-      const data: DiagnosisReport = await response.json();
+      let data: DiagnosisReport;
+      try {
+        const response = await fetch('/api/diagnose', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const contentType = response.headers.get('content-type') || '';
+        if (response.ok && contentType.includes('application/json')) {
+          const json = (await response.json()) as DiagnosisReport;
+          data = json?.summaryTitle && json?.pricingSimulation ? json : buildFallbackDiagnosis(payload);
+        } else {
+          data = buildFallbackDiagnosis(payload);
+        }
+      } catch {
+        data = buildFallbackDiagnosis(payload);
+      }
+
       setReport(data);
 
       // Automatically persist diagnosis to Firestore if user is signed in
@@ -138,8 +153,6 @@ export function LandlordDiagnoseTab({
           console.warn('Diagnosis DB save skipped:', dbErr);
         }
       }
-    } catch {
-      setErrorMessage('AI 진단 요청 중 네트워크 오류가 발생했습니다. 다시 시도해 주세요.');
     } finally {
       setIsLoading(false);
     }

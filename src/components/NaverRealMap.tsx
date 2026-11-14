@@ -179,6 +179,22 @@ export function NaverRealMap({
       crossOrigin: false,
     });
 
+    let tileStage = 0;
+    let lastFallbackAt = 0;
+    tileLayer.on('tileerror', () => {
+      const now = Date.now();
+      if (now - lastFallbackAt < 600) return;
+      lastFallbackAt = now;
+
+      if (tileStage === 0) {
+        tileStage = 1;
+        tileLayer.setUrl('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png');
+      } else if (tileStage === 1) {
+        tileStage = 2;
+        tileLayer.setUrl('https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+      }
+    });
+
     tileLayer.addTo(map);
     leafletMapRef.current = map;
 

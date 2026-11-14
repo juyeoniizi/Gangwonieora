@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { onSnapshot, query, where } from 'firebase/firestore';
+import { AlertTriangle, Check, Copy, X } from 'lucide-react';
 import { MobileTopBar } from './components/MobileTopBar';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { ExploreTab } from './components/ExploreTab';
@@ -10,6 +11,7 @@ import { ActivityTab } from './components/ActivityTab';
 import { VACANT_SPACES } from './data/spaces';
 import {
   auth,
+  checkAuthRedirectResult,
   deleteDiagnosisInDb,
   deleteSpaceInDb,
   ensureUserProfile,
@@ -24,10 +26,19 @@ import {
 } from './lib/firebase';
 import { DiagnosisRecord, ProposalRecord, TabId, VacantSpace } from './types/space';
 
+interface AuthErrorModalState {
+  code: string;
+  title: string;
+  message: string;
+  hostname?: string;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('explore');
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState<AuthErrorModalState | null>(null);
+  const [copiedHost, setCopiedHost] = useState(false);
 
   const [dbSpaces, setDbSpaces] = useState<VacantSpace[]>([]);
   const [sentProposals, setSentProposals] = useState<ProposalRecord[]>([]);
@@ -37,8 +48,50 @@ export default function App() {
   const [selectedSpaceForProposal, setSelectedSpaceForProposal] = useState<VacantSpace | null>(null);
   const [focusedSpaceId, setFocusedSpaceId] = useState<string | null>(null);
 
-  // 1. Track Firebase Auth state and seed starter spaces on first verified login
+  const reportAuthError = (err: unknown) => {
+    const code =
+      typeof err === 'object' && err !== null && 'code' in err
+        ? String((err as { code?: unknown }).code)
+        : 'auth/unknown';
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      return;
+    }
+
+    if (code === 'auth/unauthorized-domain') {
+      setAuthError({
+        code,
+        hostname,
+        title: 'Firebase 승인된 도메인 등록 필요',
+        message: `현재 접속 주소(${hostname})가 Firebase Authentication의 승인된 도메인에 등록되지 않아 Google 로그인이 차단되었습니다. Firebase Console → Authentication → 설정 → 승인된 도메인에 아래 주소를 추가하면 즉시 로그인됩니다.`,
+      });
+      return;
+    }
+
+    if (code === 'auth/popup-blocked') {
+      setAuthError({
+        code,
+        title: '로그인 팝업이 차단되었습니다',
+        message: '브라우저 팝업 차단을 허용하거나 일반 브라우저에서 다시 시도해 주세요.',
+      });
+      return;
+    }
+
+    setAuthError({
+      code,
+      title: 'Google 로그인 실패',
+      message:
+        err instanceof Error
+          ? `로그인 처리 중 오류가 발생했습니다 (${code}): ${err.message}`
+          : `로그인 처리 중 오류가 발생했습니다 (${code}).`,
+    });
+  };
+
+  // 1. Track Firebase Auth state, redirect result, and seed starter spaces
   useEffect(() => {
+    checkAuthRedirectResult().catch(reportAuthError);
+
     const unsub = onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser);
       setAuthReady(true);
@@ -71,7 +124,12 @@ export default function App() {
         setDbSpaces(list);
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, path);
+        console.warn('Firestore spaces listener fallback:', error);
+        try {
+          handleFirestoreError(error, OperationType.GET, path);
+        } catch {
+          // Keep starter spaces visible even if Firestore is temporarily unreachable
+        }
       }
     );
     return () => unsub();
@@ -135,17 +193,35 @@ export default function App() {
   }, [dbSpaces, user]);
 
   const handleSignIn = async (): Promise<User | null> => {
+    setAuthError(null);
     try {
       const signedIn = await signInWithGoogle();
       return signedIn;
     } catch (err) {
-      console.warn('Google sign-in cancelled or failed:', err);
+      console.warn('Google sign-in failed:', err);
+      reportAuthError(err);
       return null;
     }
   };
 
   const handleSignOut = async () => {
     await signOutUser();
+  };
+
+  const handleCopyHostname = async () => {
+    if (!authError?.hostname) return;
+    try {
+      await navigator.clipboard.writeText(authError.hostname);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = authError.hostname;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setCopiedHost(true);
+    setTimeout(() => setCopiedHost(false), 2000);
   };
 
   const handleStartProposalFromMap = (space: VacantSpace) => {
@@ -220,6 +296,73 @@ export default function App() {
           onSelectTab={setActiveTab}
           activityCount={pendingReceivedCount}
         />
+
+        {authError && (
+          <div
+            className="fixed md:absolute inset-0 z-[700] bg-slate-900/60 backdrop-blur-xs flex items-end md:items-center justify-center p-3"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-error-title"
+          >
+            <div className="bg-white border border-slate-200 rounded-3xl w-full p-5 shadow-2xl space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAuthError(null)}
+                  aria-label="닫기"
+                  className="p-1.5 text-slate-400 hover:text-slate-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div>
+                <h3 id="auth-error-title" className="text-sm font-bold text-slate-900">
+                  {authError.title}
+                </h3>
+                <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                  {authError.message}
+                </p>
+              </div>
+
+              {authError.hostname && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-2">
+                  <code className="text-xs font-mono text-[#0F3D6E] truncate">
+                    {authError.hostname}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={handleCopyHostname}
+                    className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-[11px] font-bold text-slate-700 inline-flex items-center gap-1 shrink-0"
+                  >
+                    {copiedHost ? (
+                      <>
+                        <Check className="w-3 h-3 text-[#0D9488]" />
+                        <span>복사됨</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        <span>도메인 복사</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setAuthError(null)}
+                className="w-full h-11 rounded-xl bg-[#0F3D6E] text-white text-xs font-bold"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,8 +1,10 @@
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
+  getRedirectResult,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   User,
 } from 'firebase/auth';
@@ -96,10 +98,41 @@ testConnection();
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-export async function signInWithGoogle(): Promise<User> {
-  const cred = await signInWithPopup(auth, googleProvider);
-  await ensureUserProfile(cred.user);
-  return cred.user;
+export async function checkAuthRedirectResult(): Promise<User | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result?.user) {
+      await ensureUserProfile(result.user);
+      return result.user;
+    }
+    return null;
+  } catch (err) {
+    console.warn('Redirect sign-in check failed:', err);
+    throw err;
+  }
+}
+
+export async function signInWithGoogle(): Promise<User | null> {
+  try {
+    const cred = await signInWithPopup(auth, googleProvider);
+    await ensureUserProfile(cred.user);
+    return cred.user;
+  } catch (err: unknown) {
+    const code =
+      typeof err === 'object' && err !== null && 'code' in err
+        ? String((err as { code?: unknown }).code)
+        : '';
+
+    if (
+      code === 'auth/popup-blocked' ||
+      code === 'auth/operation-not-supported-in-this-environment'
+    ) {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
+
+    throw err;
+  }
 }
 
 export async function signOutUser(): Promise<void> {

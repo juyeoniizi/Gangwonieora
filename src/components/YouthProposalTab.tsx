@@ -13,6 +13,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { getNaverMapSearchUrl } from '../data/spaces';
+import { buildFallbackProposal } from '../lib/aiFallback';
 import { submitProposalInDb } from '../lib/firebase';
 import { ProposalDocument, VacantSpace } from '../types/space';
 
@@ -149,26 +150,37 @@ export function YouthProposalTab({
       resultAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 80);
 
+    const payload = {
+      spaceName: selectedSpace.name,
+      spaceAddress: selectedSpace.address,
+      spaceFloor: selectedSpace.floor,
+      spacePyeong: selectedSpace.pyeong,
+      spaceDailyPrice: selectedSpace.dailyPrice,
+      period,
+      budget,
+      intent: getEffectiveIntent(),
+      applicantName,
+    };
+
     try {
       const response = await fetch('/api/proposal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          spaceName: selectedSpace.name,
-          spaceAddress: selectedSpace.address,
-          spaceFloor: selectedSpace.floor,
-          spacePyeong: selectedSpace.pyeong,
-          spaceDailyPrice: selectedSpace.dailyPrice,
-          period,
-          budget,
-          intent: getEffectiveIntent(),
-          applicantName,
-        }),
+        body: JSON.stringify(payload),
       });
+      const contentType = response.headers.get('content-type') || '';
+      if (!response.ok || !contentType.includes('application/json')) {
+        setProposal(buildFallbackProposal(payload));
+        return;
+      }
       const data: ProposalDocument = await response.json();
+      if (!data?.documentTitle || !data?.sections?.overviewAndPurpose) {
+        setProposal(buildFallbackProposal(payload));
+        return;
+      }
       setProposal(data);
     } catch {
-      setSubmitError('제안서 생성 중 오류가 발생했습니다. 다시 시도해 주세요.');
+      setProposal(buildFallbackProposal(payload));
     } finally {
       setIsLoading(false);
     }
