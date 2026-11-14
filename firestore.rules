@@ -1,0 +1,236 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global catch-all default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'juyeoun104@gmail.com';
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'createdAt', 'updatedAt'])
+        && data.uid == userId
+        && isValidId(data.uid)
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 80
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSpace(data, spaceId) {
+      return data.keys().hasAll([
+          'id', 'ownerUid', 'name', 'shortLabel', 'district', 'districtName',
+          'address', 'floor', 'pyeong', 'sqm', 'dailyPrice', 'purposes',
+          'facilities', 'highlight', 'landlordNote', 'footTraffic', 'imageKey',
+          'lat', 'lng', 'isSeeded', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'ownerUid', 'name', 'shortLabel', 'district', 'districtName',
+          'address', 'floor', 'pyeong', 'sqm', 'dailyPrice', 'purposes',
+          'facilities', 'highlight', 'landlordNote', 'footTraffic', 'imageKey',
+          'lat', 'lng', 'isSeeded', 'createdAt', 'updatedAt'
+        ])
+        && data.id == spaceId
+        && isValidId(data.ownerUid)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 100
+        && data.shortLabel is string && data.shortLabel.size() >= 1 && data.shortLabel.size() <= 40
+        && data.district in ['chuncheon', 'wonju']
+        && data.districtName is string && data.districtName.size() >= 2 && data.districtName.size() <= 40
+        && data.address is string && data.address.size() >= 4 && data.address.size() <= 200
+        && data.floor is string && data.floor.size() >= 1 && data.floor.size() <= 20
+        && data.pyeong is number && data.pyeong >= 1 && data.pyeong <= 500
+        && data.sqm is number && data.sqm >= 1 && data.sqm <= 2000
+        && data.dailyPrice is int && data.dailyPrice >= 10000 && data.dailyPrice <= 5000000
+        && data.purposes is list && data.purposes.size() >= 1 && data.purposes.size() <= 6
+        && data.purposes[0] is string && data.purposes[0].size() <= 30
+        && data.facilities is list && data.facilities.size() >= 1 && data.facilities.size() <= 10
+        && data.facilities[0] is string && data.facilities[0].size() <= 60
+        && data.highlight is string && data.highlight.size() >= 2 && data.highlight.size() <= 200
+        && data.landlordNote is string && data.landlordNote.size() >= 2 && data.landlordNote.size() <= 400
+        && data.footTraffic is string && data.footTraffic.size() >= 2 && data.footTraffic.size() <= 200
+        && data.imageKey in ['glass', 'vintage', 'concrete', 'workshop']
+        && data.lat is number && data.lat >= 33.0 && data.lat <= 39.0
+        && data.lng is number && data.lng >= 124.0 && data.lng <= 132.0
+        && data.isSeeded is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDiagnosis(data, diagnosisId) {
+      return data.keys().hasAll([
+          'id', 'ownerUid', 'location', 'floor', 'pyeong', 'features',
+          'summaryTitle', 'headline', 'recommendedDailyRate', 'monthlyPotentialRevenue', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'ownerUid', 'location', 'floor', 'pyeong', 'features',
+          'summaryTitle', 'headline', 'recommendedDailyRate', 'monthlyPotentialRevenue', 'createdAt'
+        ])
+        && data.id == diagnosisId
+        && isValidId(data.ownerUid)
+        && data.location is string && data.location.size() >= 2 && data.location.size() <= 200
+        && data.floor is string && data.floor.size() >= 1 && data.floor.size() <= 20
+        && data.pyeong is number && data.pyeong >= 1 && data.pyeong <= 500
+        && data.features is string && data.features.size() >= 1 && data.features.size() <= 400
+        && data.summaryTitle is string && data.summaryTitle.size() >= 2 && data.summaryTitle.size() <= 200
+        && data.headline is string && data.headline.size() >= 2 && data.headline.size() <= 200
+        && data.recommendedDailyRate is int && data.recommendedDailyRate >= 10000 && data.recommendedDailyRate <= 5000000
+        && data.monthlyPotentialRevenue is int && data.monthlyPotentialRevenue >= 0 && data.monthlyPotentialRevenue <= 100000000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidProposal(data, proposalId) {
+      return data.keys().hasAll([
+          'id', 'spaceId', 'spaceName', 'spaceOwnerUid', 'applicantUid',
+          'applicantName', 'period', 'budget', 'intent', 'documentTitle',
+          'proposalText', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'spaceId', 'spaceName', 'spaceOwnerUid', 'applicantUid',
+          'applicantName', 'period', 'budget', 'intent', 'documentTitle',
+          'proposalText', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.id == proposalId
+        && isValidId(data.spaceId)
+        && data.spaceName is string && data.spaceName.size() >= 2 && data.spaceName.size() <= 120
+        && isValidId(data.spaceOwnerUid)
+        && isValidId(data.applicantUid)
+        && data.applicantName is string && data.applicantName.size() >= 1 && data.applicantName.size() <= 80
+        && data.period is string && data.period.size() >= 2 && data.period.size() <= 100
+        && data.budget is string && data.budget.size() >= 2 && data.budget.size() <= 120
+        && data.intent is string && data.intent.size() >= 2 && data.intent.size() <= 500
+        && data.documentTitle is string && data.documentTitle.size() >= 2 && data.documentTitle.size() <= 160
+        && data.proposalText is string && data.proposalText.size() >= 10 && data.proposalText.size() <= 5000
+        && data.status in ['pending', 'accepted', 'declined']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Users collection: self-owned minimal profile (no PII)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUserProfile(incoming(), userId)
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // Spaces collection: public marketplace listings (no PII)
+    match /spaces/{spaceId} {
+      allow get: if isValidId(spaceId);
+      allow list: if true;
+      allow create: if isVerifiedUser()
+        && isValidId(spaceId)
+        && isValidSpace(incoming(), spaceId)
+        && incoming().ownerUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(spaceId)
+        && isValidSpace(incoming(), spaceId)
+        && (existing().ownerUid == request.auth.uid || isAdmin())
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'shortLabel', 'dailyPrice', 'purposes', 'facilities',
+          'highlight', 'landlordNote', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedUser()
+        && isValidId(spaceId)
+        && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    // Diagnoses collection: landlord private saved diagnosis records
+    match /diagnoses/{diagnosisId} {
+      allow get: if isSignedIn() && isValidId(diagnosisId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(diagnosisId)
+        && isValidDiagnosis(incoming(), diagnosisId)
+        && incoming().ownerUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser()
+        && isValidId(diagnosisId)
+        && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    // Proposals collection: youth planner -> space landlord
+    match /proposals/{proposalId} {
+      allow get: if isSignedIn()
+        && isValidId(proposalId)
+        && (existing().applicantUid == request.auth.uid || existing().spaceOwnerUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn()
+        && (resource.data.applicantUid == request.auth.uid || resource.data.spaceOwnerUid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(proposalId)
+        && isValidProposal(incoming(), proposalId)
+        && incoming().applicantUid == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/spaces/$(incoming().spaceId))
+        && incoming().spaceOwnerUid == get(/databases/$(database)/documents/spaces/$(incoming().spaceId)).data.ownerUid;
+      allow update: if isVerifiedUser()
+        && isValidId(proposalId)
+        && isValidProposal(incoming(), proposalId)
+        && (
+          (
+            existing().spaceOwnerUid == request.auth.uid
+            && existing().status == 'pending'
+            && incoming().status in ['accepted', 'declined']
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+          || isAdmin()
+        )
+        && incoming().applicantUid == existing().applicantUid
+        && incoming().spaceOwnerUid == existing().spaceOwnerUid
+        && incoming().spaceId == existing().spaceId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isVerifiedUser()
+        && isValidId(proposalId)
+        && (existing().applicantUid == request.auth.uid || isAdmin());
+    }
+  }
+}

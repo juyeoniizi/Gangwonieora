@@ -1,0 +1,6 @@
+{
+  "name": "강원이어라",
+  "description": "AI 기반 강원 원도심 유휴 공간 매칭 플랫폼 — 춘천 명동·원주 중앙동 빈 상가와 청년 기획자를 연결합니다.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
